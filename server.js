@@ -341,130 +341,117 @@ CRITICAL:
 });
 
 // --------------------------------------------------
-// PHASE 1 – GLP-1 Meal Planner – OpenAI endpoint
+// GLP-1 Breakfast Planner endpoint (Shopify-friendly)
 // POST /api/glp1/plan
 // --------------------------------------------------
 app.post('/api/glp1/plan', async (req, res) => {
   try {
     if (!OPENAI_API_KEY) {
-      return res.status(400).json({
-        error: 'OpenAI API key (OPENAI_API_KEY) not configured',
-      });
+      return res
+        .status(400)
+        .json({ error: 'OpenAI API key (OPENAI_API_KEY) not configured' });
     }
 
-    const {
-      goal,                 // e.g. "weight_loss", "maintenance"
-      dailyCalories,        // e.g. 1400
-      mealsPerDay,          // e.g. 2 or 3
-      dietaryRestrictions,  // e.g. "gluten-free, dairy-free"
-      likes,                // e.g. "berries, eggs, avocado"
-      dislikes,             // e.g. "tofu, mushrooms"
-      scheduleNotes,        // e.g. "busy mornings, can cook on weekends"
-      days                  // e.g. 3 or 7
-    } = req.body || {};
+    const { channel, profile, meta } = req.body || {};
 
-    if (!goal || !dailyCalories || !mealsPerDay || !days) {
-      return res.status(400).json({
-        error: 'Missing required fields (goal, dailyCalories, mealsPerDay, days)',
-      });
-    }
+    const medication = profile?.medication || 'GLP-1 medication';
+    const primaryGoal =
+      profile?.primaryGoal || 'Steady weight loss with muscle preservation';
+    const morningTime = profile?.morningTime || 'about 10 minutes';
+    const flavorPreference = profile?.flavorPreference || 'flexible';
+    const morningFeeling = profile?.morningFeeling || 'varies';
+    const dietaryConstraints = Array.isArray(profile?.dietaryConstraints)
+      ? profile.dietaryConstraints.join(', ')
+      : 'none specified';
+    const freeTextNotes = profile?.freeTextNotes || '';
+    const firstName = profile?.name || 'Friend';
+
+    const brand = meta?.brand || "Daily N'Oats";
 
     const systemPrompt = `
-You are a GLP-1 informed nutrition coach for Daily N'Oats customers.
-Create realistic, simple, GLP-1-friendly meal plans that:
-- Are high protein, low sugar, and supportive of satiety
-- Use accessible ingredients
-- Respect the user's dietary restrictions and preferences
-- Emphasize practical prep (batch cooking, leftovers, simple assembly)
-Return your response as structured JSON only.`;
+You are a nutrition-focused AI creating GLP-1 friendly *educational breakfast ideas* centered around a low-carb oatmeal alternative brand called "${brand}".
+You are NOT giving medical advice. You do NOT diagnose, treat, or prescribe. 
+Always remind the user to check with their clinician for medical questions.
+Your output must be HTML only (no markdown), suitable to drop directly into a Shopify page.
+Use clear headings, bullet lists, and short paragraphs. Keep it under ~1,200 words.
+Important constraints:
+- Always mention that this is not medical advice.
+- Emphasize protein, satiety, and gentle digestion for GLP-1 users.
+- Build around ${brand} as the breakfast anchor.
+`;
 
     const userPrompt = `
-Create a ${days}-day GLP-1-friendly meal plan.
+USER PROFILE:
+- First name: ${firstName}
+- GLP-1 medication: ${medication}
+- Primary goal: ${primaryGoal}
+- Morning time / complexity: ${morningTime}
+- Flavor / texture preferences: ${flavorPreference}
+- How mornings feel: ${morningFeeling}
+- Dietary constraints: ${dietaryConstraints}
+- Extra notes: ${freeTextNotes || 'none'}
+- Channel: ${channel || 'shopify-glp1-planner'}
 
-Goal: ${goal}
-Daily calories target: ${dailyCalories}
-Meals per day: ${mealsPerDay}
+CONTEXT:
+This plan will appear on a Shopify landing or product page for ${brand}, a low-carb, GLP-1 friendly oatmeal alternative. 
+The user is likely trying to manage appetite, nausea, cravings, and blood sugar while on a GLP-1.
 
-Dietary restrictions: ${dietaryRestrictions || 'none specified'}
-Foods the user likes: ${likes || 'not specified'}
-Foods the user dislikes: ${dislikes || 'not specified'}
-Schedule / lifestyle notes: ${scheduleNotes || 'not specified'}
+TASK:
+Create a personalized *GLP-1 friendly breakfast plan* that:
 
-For each day, include:
-- Day label (e.g., "Day 1")
-- Each meal with: name, brief description, rough calories and protein estimate
-- 1–2 snack ideas if appropriate
-- 1 "GLP-1 coaching tip" for that day (hydration, protein, fiber, movement, etc.)
+1. Starts with a short, empathetic intro addressing GLP-1 users by name ("Hi ${firstName}, …").
+2. Gives 2–3 specific breakfast "frameworks" built around ${brand}, including:
+   - How to prepare it (simple steps)
+   - Protein boosts (e.g., Greek yogurt, protein powder, nut butter, etc.)
+   - Optional toppings or variations that match their flavor preferences.
+3. Addresses their main goal (e.g., steady weight loss, nausea control, cravings, blood sugar).
+4. Includes a small "If you feel more nauseous" or "If you have no appetite" variation.
+5. Includes a simple, short "Shopping / Prep List" for the week.
+6. Ends with a clear disclaimer that this is *general educational information only* and not medical advice.
 
-RESPONSE FORMAT (MUST be valid JSON):
+OUTPUT FORMAT:
+Return ONLY HTML. No markdown, no JSON.
+Use this rough structure:
 
-{
-  "meta": {
-    "goal": "string",
-    "dailyCalories": number,
-    "mealsPerDay": number,
-    "days": number,
-    "notes": "string"
-  },
-  "days": [
-    {
-      "day": "Day 1",
-      "coachingTip": "string",
-      "meals": [
-        {
-          "type": "Breakfast",
-          "name": "string",
-          "description": "string",
-          "calories": number,
-          "proteinGrams": number
-        }
-      ],
-      "snacks": [
-        {
-          "name": "string",
-          "description": "string",
-          "calories": number,
-          "proteinGrams": number
-        }
-      ]
-    }
-  ],
-  "summary": {
-    "keyThemes": ["string"],
-    "shoppingList": ["string"],
-    "prepTips": ["string"]
-  }
-}
+<h3>Hi [First Name], here’s your GLP-1 friendly breakfast plan</h3>
+<p>Short intro...</p>
 
-Return ONLY JSON. No markdown, no extra text.
+<h4>1. Core Daily N'Oats Breakfast</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>2. Alternate Option for Busy Mornings</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>3. Gentle Option for Nauseous Mornings</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>Weekly Shopping & Prep List</h4>
+<ul>...</ul>
+
+<p><em>Important: This is general educational information only and not medical advice. Always confirm with your clinician...</em></p>
 `;
 
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
     });
 
-    const raw = completion.choices?.[0]?.message?.content;
-    if (!raw) {
-      throw new Error('No content returned from OpenAI for GLP-1 planner');
+    const content = completion.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content returned from OpenAI');
     }
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      console.error('Failed to parse JSON from OpenAI (GLP-1):', raw);
-      throw new Error('OpenAI did not return valid JSON for GLP-1 planner.');
-    }
-
-    return res.json(parsed);
-  } catch (err) {
-    console.error('Error in /api/glp1/plan:', err);
-    res.status(500).json({ error: err.message || 'Unknown error' });
+    // Frontend expects { planHtml: "..." }
+    res.json({ planHtml: content });
+  } catch (error) {
+    console.error('Error in /api/glp1/plan:', error);
+    res.status(500).json({ error: error.message || 'Unknown error' });
   }
 });
 
@@ -761,126 +748,15 @@ app.post('/api/mailerlite/campaign', async (req, res) => {
     res.status(500).json({ error: error.message || 'Unknown error' });
   }
 });
-// --------------------------------------------------
-// GLP-1 Breakfast Planner endpoint
-// POST /api/glp1/plan
-// --------------------------------------------------
-app.post('/api/glp1/plan', async (req, res) => {
-  try {
-    if (!OPENAI_API_KEY) {
-      return res
-        .status(400)
-        .json({ error: 'OpenAI API key (OPENAI_API_KEY) not configured' });
-    }
 
-    const { channel, profile, meta } = req.body || {};
-
-    const medication = profile?.medication || 'GLP-1 medication';
-    const primaryGoal = profile?.primaryGoal || 'Steady weight loss with muscle preservation';
-    const morningTime = profile?.morningTime || 'about 10 minutes';
-    const flavorPreference = profile?.flavorPreference || 'flexible';
-    const morningFeeling = profile?.morningFeeling || 'varies';
-    const dietaryConstraints = Array.isArray(profile?.dietaryConstraints)
-      ? profile.dietaryConstraints.join(', ')
-      : 'none specified';
-    const freeTextNotes = profile?.freeTextNotes || '';
-    const firstName = profile?.name || 'Friend';
-
-    const brand = meta?.brand || "Daily N'Oats";
-
-    const systemPrompt = `
-You are a nutrition-focused AI creating GLP-1 friendly *educational breakfast ideas* centered around a low-carb oatmeal alternative brand called "${brand}".
-You are NOT giving medical advice. You do NOT diagnose, treat, or prescribe. 
-Always remind the user to check with their clinician for medical questions.
-Your output must be HTML only (no markdown), suitable to drop directly into a Shopify page.
-Use clear headings, bullet lists, and short paragraphs. Keep it under ~1,200 words.
-Important constraints:
-- Always mention that this is not medical advice.
-- Emphasize protein, satiety, and gentle digestion for GLP-1 users.
-- Build around ${brand} as the breakfast anchor.
-`;
-
-    const userPrompt = `
-USER PROFILE:
-- First name: ${firstName}
-- GLP-1 medication: ${medication}
-- Primary goal: ${primaryGoal}
-- Morning time / complexity: ${morningTime}
-- Flavor / texture preferences: ${flavorPreference}
-- How mornings feel: ${morningFeeling}
-- Dietary constraints: ${dietaryConstraints}
-- Extra notes: ${freeTextNotes || 'none'}
-- Channel: ${channel || 'shopify-glp1-planner'}
-
-CONTEXT:
-This plan will appear on a Shopify landing or product page for ${brand}, a low-carb, GLP-1 friendly oatmeal alternative. 
-The user is likely trying to manage appetite, nausea, cravings, and blood sugar while on a GLP-1.
-
-TASK:
-Create a personalized *GLP-1 friendly breakfast plan* that:
-
-1. Starts with a short, empathetic intro addressing GLP-1 users by name ("Hi ${firstName}, …").
-2. Gives 2–3 specific breakfast "frameworks" built around ${brand}, including:
-   - How to prepare it (simple steps)
-   - Protein boosts (e.g., Greek yogurt, protein powder, nut butter, etc.)
-   - Optional toppings or variations that match their flavor preferences.
-3. Addresses their main goal (e.g., steady weight loss, nausea control, cravings, blood sugar).
-4. Includes a small "If you feel more nauseous" or "If you have no appetite" variation.
-5. Includes a simple, short "Shopping / Prep List" for the week.
-6. Ends with a clear disclaimer that this is *general educational information only* and not medical advice.
-
-OUTPUT FORMAT:
-Return ONLY HTML. No markdown, no JSON.
-Use this rough structure:
-
-<h3>Hi [First Name], here’s your GLP-1 friendly breakfast plan</h3>
-<p>Short intro...</p>
-
-<h4>1. Core Daily N'Oats Breakfast</h4>
-<p>...</p>
-<ul>...</ul>
-
-<h4>2. Alternate Option for Busy Mornings</h4>
-<p>...</p>
-<ul>...</ul>
-
-<h4>3. Gentle Option for Nauseous Mornings</h4>
-<p>...</p>
-<ul>...</ul>
-
-<h4>Weekly Shopping & Prep List</h4>
-<ul>...</ul>
-
-<p><em>Important: This is general educational information only and not medical advice. Always confirm with your clinician...</em></p>
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    });
-
-    const content = completion.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('No content returned from OpenAI');
-    }
-
-    // Frontend expects { planHtml: "..." }
-    res.json({ planHtml: content });
-  } catch (error) {
-    console.error('Error in /api/glp1/plan:', error);
-    res.status(500).json({ error: error.message || 'Unknown error' });
-  }
-});
 // --------------------------------------------------
 // NEW: Apply AI-derived RULES to ALL Shopify customers in batch
 // --------------------------------------------------
 function applyRuleConfigToCustomer(customer, ruleConfig) {
   const tiers =
     ruleConfig && Array.isArray(ruleConfig.tiers) ? ruleConfig.tiers : [];
-  const defaultTier = ruleConfig && ruleConfig.default ? ruleConfig.default : null;
+  const defaultTier =
+    ruleConfig && ruleConfig.default ? ruleConfig.default : null;
 
   for (const tier of tiers) {
     const minTotalSpent =
@@ -921,7 +797,9 @@ function applyRuleConfigToCustomer(customer, ruleConfig) {
           tier.messagingAngle ||
           'Personalized win-back offer based on your purchase history.',
         expectedValue:
-          typeof tier.expectedValue === 'number' ? tier.expectedValue : undefined,
+          typeof tier.expectedValue === 'number'
+            ? tier.expectedValue
+            : undefined,
       };
     }
   }
