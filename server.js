@@ -761,7 +761,119 @@ app.post('/api/mailerlite/campaign', async (req, res) => {
     res.status(500).json({ error: error.message || 'Unknown error' });
   }
 });
+// --------------------------------------------------
+// GLP-1 Breakfast Planner endpoint
+// POST /api/glp1/plan
+// --------------------------------------------------
+app.post('/api/glp1/plan', async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res
+        .status(400)
+        .json({ error: 'OpenAI API key (OPENAI_API_KEY) not configured' });
+    }
 
+    const { channel, profile, meta } = req.body || {};
+
+    const medication = profile?.medication || 'GLP-1 medication';
+    const primaryGoal = profile?.primaryGoal || 'Steady weight loss with muscle preservation';
+    const morningTime = profile?.morningTime || 'about 10 minutes';
+    const flavorPreference = profile?.flavorPreference || 'flexible';
+    const morningFeeling = profile?.morningFeeling || 'varies';
+    const dietaryConstraints = Array.isArray(profile?.dietaryConstraints)
+      ? profile.dietaryConstraints.join(', ')
+      : 'none specified';
+    const freeTextNotes = profile?.freeTextNotes || '';
+    const firstName = profile?.name || 'Friend';
+
+    const brand = meta?.brand || "Daily N'Oats";
+
+    const systemPrompt = `
+You are a nutrition-focused AI creating GLP-1 friendly *educational breakfast ideas* centered around a low-carb oatmeal alternative brand called "${brand}".
+You are NOT giving medical advice. You do NOT diagnose, treat, or prescribe. 
+Always remind the user to check with their clinician for medical questions.
+Your output must be HTML only (no markdown), suitable to drop directly into a Shopify page.
+Use clear headings, bullet lists, and short paragraphs. Keep it under ~1,200 words.
+Important constraints:
+- Always mention that this is not medical advice.
+- Emphasize protein, satiety, and gentle digestion for GLP-1 users.
+- Build around ${brand} as the breakfast anchor.
+`;
+
+    const userPrompt = `
+USER PROFILE:
+- First name: ${firstName}
+- GLP-1 medication: ${medication}
+- Primary goal: ${primaryGoal}
+- Morning time / complexity: ${morningTime}
+- Flavor / texture preferences: ${flavorPreference}
+- How mornings feel: ${morningFeeling}
+- Dietary constraints: ${dietaryConstraints}
+- Extra notes: ${freeTextNotes || 'none'}
+- Channel: ${channel || 'shopify-glp1-planner'}
+
+CONTEXT:
+This plan will appear on a Shopify landing or product page for ${brand}, a low-carb, GLP-1 friendly oatmeal alternative. 
+The user is likely trying to manage appetite, nausea, cravings, and blood sugar while on a GLP-1.
+
+TASK:
+Create a personalized *GLP-1 friendly breakfast plan* that:
+
+1. Starts with a short, empathetic intro addressing GLP-1 users by name ("Hi ${firstName}, …").
+2. Gives 2–3 specific breakfast "frameworks" built around ${brand}, including:
+   - How to prepare it (simple steps)
+   - Protein boosts (e.g., Greek yogurt, protein powder, nut butter, etc.)
+   - Optional toppings or variations that match their flavor preferences.
+3. Addresses their main goal (e.g., steady weight loss, nausea control, cravings, blood sugar).
+4. Includes a small "If you feel more nauseous" or "If you have no appetite" variation.
+5. Includes a simple, short "Shopping / Prep List" for the week.
+6. Ends with a clear disclaimer that this is *general educational information only* and not medical advice.
+
+OUTPUT FORMAT:
+Return ONLY HTML. No markdown, no JSON.
+Use this rough structure:
+
+<h3>Hi [First Name], here’s your GLP-1 friendly breakfast plan</h3>
+<p>Short intro...</p>
+
+<h4>1. Core Daily N'Oats Breakfast</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>2. Alternate Option for Busy Mornings</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>3. Gentle Option for Nauseous Mornings</h4>
+<p>...</p>
+<ul>...</ul>
+
+<h4>Weekly Shopping & Prep List</h4>
+<ul>...</ul>
+
+<p><em>Important: This is general educational information only and not medical advice. Always confirm with your clinician...</em></p>
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+
+    const content = completion.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content returned from OpenAI');
+    }
+
+    // Frontend expects { planHtml: "..." }
+    res.json({ planHtml: content });
+  } catch (error) {
+    console.error('Error in /api/glp1/plan:', error);
+    res.status(500).json({ error: error.message || 'Unknown error' });
+  }
+});
 // --------------------------------------------------
 // NEW: Apply AI-derived RULES to ALL Shopify customers in batch
 // --------------------------------------------------
